@@ -1,0 +1,8 @@
+#!/bin/sh -x
+
+export ANDROID_MAJOR_VERSION=p
+
+cp -p ./arch/arm64/boot/dts/exynos/Makefile-g973f ./arch/arm64/boot/dts/exynos/Makefile
+make mrproper
+make ARCH=arm64 exynos9820-beyond1lte_caliban_defconfig
+make -j$(nproc) ARCH=arm64
