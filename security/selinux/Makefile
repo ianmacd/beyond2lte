@@ -12,7 +12,6 @@ ccflags-y += -DSEC_SELINUX_DEBUG
 endif
 endif
 endif
-
 # ] SEC_SELINUX_PORTING_COMMON
 
 obj-$(CONFIG_SECURITY_SELINUX) := selinux.o
