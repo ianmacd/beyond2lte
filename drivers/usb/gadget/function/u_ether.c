@@ -692,6 +692,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	unsigned long	tx_timeout;
 	bool eth_multi_pkt_xfer = 0;
 	bool eth_supports_multi_frame = 0;
+	bool eth_is_fixed = 0;
 
 	if (dev->en_timer) {
 		hrtimer_cancel(&dev->tx_timer);
@@ -704,6 +705,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 		cdc_filter = dev->port_usb->cdc_filter;
 		eth_multi_pkt_xfer = dev->port_usb->multi_pkt_xfer;
 		eth_supports_multi_frame = dev->port_usb->supports_multi_frame;
+		eth_is_fixed = dev->port_usb->is_fixed;
 	} else {
 		in = NULL;
 		cdc_filter = 0;

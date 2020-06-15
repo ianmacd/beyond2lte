@@ -40,11 +40,13 @@
 #include "exynos_perf_pmufunc.h"
 
 #include <soc/samsung/cal-if.h>
+#include <soc/samsung/exynos-devfreq.h>
 
 #define EVENT_MAX	7
 
 struct device *memcpy_dev;
 static uint cal_id_mif = 0;
+static uint devfreq_mif = 0;
 
 enum memtype {
 	MT_CACHE = 1,
@@ -350,7 +352,11 @@ void func_perf(void *src, void *dst)
 		chk_sum = 0;
 		v[0] = v[1] = v[2] = v[3] = v[4] = v[5] = v[6] = 0;
 		cpufreq = cpufreq_quick_get(core) / 1000;
-		mif = (uint)cal_dfs_get_rate(cal_id_mif) / 1000;
+#if defined(CONFIG_SOC_EXYNOS9830) || defined(CONFIG_SOC_EXYNOS991)
+		mif = (uint)exynos_devfreq_get_domain_freq(devfreq_mif) / 1000;
+#else
+		mif = (uint)cal_dfs_cached_get_rate(cal_id_mif) / 1000;
+#endif
 		switch (func) {
 			case FT_MEMCPY:
 				MEMCPY_FUNC(memcpy(dst, src + align, xfer_size), flush, 0, pmu, chk, 0);
@@ -579,6 +585,7 @@ static void test_thread_exit(void)
 	}	\
 	static ssize_t name##_seq_write(struct file *file, const char __user *buffer, size_t count, loff_t *off) {	\
 		char buf[20];	\
+		count = (count > 20)? 20 : count;	\
 		if (copy_from_user(buf, buffer, count) != 0)	\
 			return -EFAULT;	\
 		sscanf(buf, "%d", &name);	\
@@ -631,6 +638,7 @@ static int event_seq_show(struct seq_file *file, void *unused)
 static ssize_t event_seq_write(struct file *file, const char __user *buffer, size_t count, loff_t *off)
 {
 	char buf[128];
+	count = (count > 128)? 128 : count;
 	if (copy_from_user(buf, buffer, count) != 0)
 		return -EFAULT;
 	sscanf(buf, "%x %x %x %x %x %x %x",
@@ -669,6 +677,7 @@ static int run_seq_show(struct seq_file *file, void *unused)
 static ssize_t run_seq_write(struct file *file, const char __user *buffer, size_t count, loff_t *off)
 {
 	char buf[10];
+	count = (count > 10)? 10 : count;
 	if (copy_from_user(buf, buffer, count) != 0)
 		return -EFAULT;
 	sscanf(buf, "%d", &run);
@@ -734,6 +743,7 @@ static int info_seq_show(struct seq_file *file, void *unused)
 }
 static ssize_t info_seq_write(struct file *file, const char __user *buffer, size_t count, loff_t *off) {
 	char buf[20];
+	count = (count > 20)? 20 : count;
 	if (copy_from_user(buf, buffer, count) != 0)
 		return -EFAULT;
 	return count;
@@ -793,93 +803,94 @@ static int __init perf_init(void)
 
 	dn = of_find_node_by_name(dn, "exynos_perf_ncmemcpy");
 	of_property_read_u32(dn, "cal-id-mif", &cal_id_mif);
+	of_property_read_u32(dn, "devfreq-mif", &devfreq_mif);
 
 	root = debugfs_create_dir("exynos_perf_ncmemcpy", NULL);
 	if (!root) {
 		pr_err("%s: create debugfs\n", __FILE__);
 		return -ENOMEM;
 	}
-	d = debugfs_create_file("level", 0777, root,
+	d = debugfs_create_file("level", S_IRUSR, root,
 					(unsigned int *)0,
 					&level_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("setway", 0777, root,
+	d = debugfs_create_file("setway", S_IRUSR, root,
 					(unsigned int *)0,
 					&setway_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("src_mset", 0777, root,
+	d = debugfs_create_file("src_mset", S_IRUSR, root,
 					(unsigned int *)0,
 					&src_mset_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("chk", 0777, root,
+	d = debugfs_create_file("chk", S_IRUSR, root,
 					(unsigned int *)0,
 					&chk_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("pmu", 0777, root,
+	d = debugfs_create_file("pmu", S_IRUSR, root,
 					(unsigned int *)0,
 					&pmu_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("dump", 0777, root,
+	d = debugfs_create_file("dump", S_IRUSR, root,
 					(unsigned int *)0,
 					&dump_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("flush", 0777, root,
+	d = debugfs_create_file("flush", S_IRUSR, root,
 					(unsigned int *)0,
 					&flush_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("align", 0777, root,
+	d = debugfs_create_file("align", S_IRUSR, root,
 					(unsigned int *)0,
 					&align_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("val", 0777, root,
+	d = debugfs_create_file("val", S_IRUSR, root,
 					(unsigned int *)0,
 					&val_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("start_size", 0777, root,
+	d = debugfs_create_file("start_size", S_IRUSR, root,
 					(unsigned int *)0,
 					&start_size_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("end_size", 0777, root,
+	d = debugfs_create_file("end_size", S_IRUSR, root,
 					(unsigned int *)0,
 					&end_size_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("func", 0777, root,
+	d = debugfs_create_file("func", S_IRUSR, root,
 					(unsigned int *)0,
 					&func_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("type", 0777, root,
+	d = debugfs_create_file("type", S_IRUSR, root,
 					(unsigned int *)0,
 					&type_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("core", 0777, root,
+	d = debugfs_create_file("core", S_IRUSR, root,
 					(unsigned int *)0,
 					&core_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("event", 0777, root,
+	d = debugfs_create_file("event", S_IRUSR, root,
 					(unsigned int *)0,
 					&event_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("run", 0777, root,
+	d = debugfs_create_file("run", S_IRUSR, root,
 					(unsigned int *)0,
 					&run_debugfs_fops);
 	if (!d)
 		return -ENOMEM;
-	d = debugfs_create_file("info", 0666, root,
+	d = debugfs_create_file("info", S_IRUSR, root,
 					(unsigned int *)0,
 					&info_debugfs_fops);
 	if (!d)
