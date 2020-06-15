@@ -31,7 +31,6 @@
 #include "five_tee_api.h"
 #include "five_porting.h"
 #include "five_cache.h"
-#include "five_dmverity.h"
 
 #define FIVE_RSA_SIGNATURE_MAX_LENGTH (2048/8)
 
@@ -158,7 +157,7 @@ static int five_fix_xattr(struct task_struct *task,
 	if (unlikely(rc))
 		return rc;
 
-	sig_len = (size_t)body_cert.hash->length + file_label_len;
+	sig_len = body_cert.hash->length + file_label_len;
 
 	sig = kzalloc(sig_len, GFP_NOFS);
 	if (!sig)
@@ -210,6 +209,34 @@ int five_read_xattr(struct dentry *dentry, char **xattr_value)
 		ret = 0;
 
 	return ret;
+}
+
+static bool dmverity_protected(struct file *file)
+{
+	const char * const paths[] = {
+		"/system/", "/vendor/", "/apex/"
+	};
+	const char *pathname = NULL;
+	char *pathbuf = NULL;
+	bool result = false;
+	size_t i;
+
+	pathname = five_d_path(&file->f_path, &pathbuf);
+	if (!pathname)
+		goto exit;
+
+	for (i = 0; i < ARRAY_SIZE(paths); ++i) {
+		if (!strncmp(pathname, paths[i], strlen(paths[i]))) {
+			result = true;
+			break;
+		}
+	}
+
+exit:
+	if (pathbuf)
+		__putname(pathbuf);
+
+	return result;
 }
 
 static bool bad_fs(struct inode *inode)
@@ -266,7 +293,7 @@ int five_appraise_measurement(struct task_struct *task, int func,
 
 	if (!cert) {
 		cause = CAUSE_NO_CERT;
-		if (five_is_dmverity_protected(file))
+		if (dmverity_protected(file))
 			status = FIVE_FILE_DMVERITY;
 		goto out;
 	}
@@ -431,7 +458,7 @@ static int five_update_xattr(struct task_struct *task,
 
 	BUG_ON(!task || !iint || !file || !label);
 
-	hash_len = (size_t)hash_digest_size[five_hash_algo];
+	hash_len = hash_digest_size[five_hash_algo];
 	hash = kzalloc(hash_len, GFP_KERNEL);
 	if (!hash)
 		return -ENOMEM;
@@ -480,19 +507,6 @@ exit:
 	return rc;
 }
 
-static void five_reset_appraise_flags(struct dentry *dentry)
-{
-	struct inode *inode = d_backing_inode(dentry);
-	struct integrity_iint_cache *iint;
-
-	if (!S_ISREG(inode->i_mode))
-		return;
-
-	iint = integrity_iint_find(inode);
-	if (iint)
-		five_set_cache_status(iint, FIVE_FILE_UNKNOWN);
-}
-
 /**
  * five_inode_post_setattr - reflect file metadata changes
  * @dentry: pointer to the affected dentry
@@ -504,7 +518,15 @@ static void five_reset_appraise_flags(struct dentry *dentry)
  */
 void five_inode_post_setattr(struct task_struct *task, struct dentry *dentry)
 {
-	five_reset_appraise_flags(dentry);
+	struct inode *inode = d_backing_inode(dentry);
+	struct integrity_iint_cache *iint;
+
+	if (!S_ISREG(inode->i_mode))
+		return;
+
+	iint = integrity_iint_find(inode);
+	if (iint)
+		five_set_cache_status(iint, FIVE_FILE_UNKNOWN);
 }
 
 /*
@@ -523,6 +545,18 @@ static int five_protect_xattr(struct dentry *dentry, const char *xattr_name,
 	return 0;
 }
 
+static void five_reset_appraise_flags(struct inode *inode)
+{
+	struct integrity_iint_cache *iint;
+
+	if (!S_ISREG(inode->i_mode))
+		return;
+
+	iint = integrity_iint_find(inode);
+	if (iint)
+		five_set_cache_status(iint, FIVE_FILE_UNKNOWN);
+}
+
 int five_inode_setxattr(struct dentry *dentry, const char *xattr_name,
 			const void *xattr_value, size_t xattr_value_len)
 {
@@ -530,7 +564,7 @@ int five_inode_setxattr(struct dentry *dentry, const char *xattr_name,
 				   xattr_value_len);
 
 	if (result == 1 && xattr_value_len == 0) {
-		five_reset_appraise_flags(dentry);
+		five_reset_appraise_flags(d_backing_inode(dentry));
 		return 0;
 	}
 
@@ -553,7 +587,7 @@ int five_inode_setxattr(struct dentry *dentry, const char *xattr_name,
 		if (!digsig)
 			return -EPERM;
 
-		five_reset_appraise_flags(dentry);
+		five_reset_appraise_flags(d_backing_inode(dentry));
 		result = 0;
 	}
 
@@ -566,7 +600,7 @@ int five_inode_removexattr(struct dentry *dentry, const char *xattr_name)
 
 	result = five_protect_xattr(dentry, xattr_name, NULL, 0);
 	if (result == 1) {
-		five_reset_appraise_flags(dentry);
+		five_reset_appraise_flags(d_backing_inode(dentry));
 		result = 0;
 	}
 	return result;

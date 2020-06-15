@@ -56,8 +56,6 @@ MODULE_PARM_DESC(soft_panic,
 static struct hrtimer softdog_ticktock;
 static struct hrtimer softdog_preticktock;
 
-static struct watchdog_device softdog_dev;
-
 static enum hrtimer_restart softdog_fire(struct hrtimer *timer)
 {
 	module_put(THIS_MODULE);
@@ -65,11 +63,7 @@ static enum hrtimer_restart softdog_fire(struct hrtimer *timer)
 		pr_crit("Triggered - Reboot ignored\n");
 	} else if (soft_panic) {
 		pr_crit("Initiating panic\n");
-#if IS_ENABLED(CONFIG_SEC_DEBUG_SOFTDOG_PWDT)
-		panic("Software Watchdog Timer expired %ds", softdog_dev.timeout);
-#else
 		panic("Software Watchdog Timer expired");
-#endif
 	} else {
 		pr_crit("Initiating system reboot\n");
 		emergency_restart();
@@ -78,6 +72,8 @@ static enum hrtimer_restart softdog_fire(struct hrtimer *timer)
 
 	return HRTIMER_NORESTART;
 }
+
+static struct watchdog_device softdog_dev;
 
 static enum hrtimer_restart softdog_pretimeout(struct hrtimer *timer)
 {
@@ -92,8 +88,6 @@ static int softdog_ping(struct watchdog_device *w)
 		__module_get(THIS_MODULE);
 	hrtimer_start(&softdog_ticktock, ktime_set(w->timeout, 0),
 		      HRTIMER_MODE_REL);
-
-	pr_info_ratelimited("%s: %u\n", __func__, w->timeout);
 
 	if (IS_ENABLED(CONFIG_SOFT_WATCHDOG_PRETIMEOUT)) {
 		if (w->pretimeout)
@@ -111,8 +105,6 @@ static int softdog_stop(struct watchdog_device *w)
 {
 	if (hrtimer_cancel(&softdog_ticktock))
 		module_put(THIS_MODULE);
-
-	pr_info_ratelimited("%s: %u\n", __func__, w->timeout);
 
 	if (IS_ENABLED(CONFIG_SOFT_WATCHDOG_PRETIMEOUT))
 		hrtimer_cancel(&softdog_preticktock);

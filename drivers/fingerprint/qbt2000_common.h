@@ -80,8 +80,6 @@ enum qbt2000_commands {
 	QBT2000_NOISE_REQUEST_START = 34,
 	QBT2000_NOISE_STATUS_GET = 35,
 	QBT2000_NOISE_I2C_RESULT_GET = 36,
-	QBT2000_NOISE_REQUEST_STATUS = 37,
-	QBT2000_GET_MODELINFO = 38,
 	QBT2000_IS_WHUB_CONNECTED = 105,
 };
 
@@ -177,7 +175,6 @@ struct qbt2000_drvdata {
 	bool tz_mode;
 	bool wuhb_test_flag;
 	int wuhb_test_result;
-	const char *model_info;
 #ifdef QBT2000_AVOID_NOISE
 	int noise_status;
 	int noise_onoff_flag;
